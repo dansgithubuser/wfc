@@ -51,7 +51,6 @@
 
 #include <configuru.hpp>
 #include <emilib/strprintf.hpp>
-#include <loguru.hpp>
 #include <stb_image.h>
 #include <stb_image_write.h>
 
@@ -1094,7 +1093,6 @@ void run_config_file(const Options& options, const std::string& path)
 
 int main(int argc, char* argv[])
 {
-	loguru::init(argc, argv);
 	Options options;
 	run_config_file(options, "samples.cfg");
 }

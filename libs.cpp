@@ -7,9 +7,6 @@
 #define CONFIGURU_IMPLEMENTATION 1
 #include <configuru.hpp>
 
-#define LOGURU_IMPLEMENTATION 1
-#include <loguru.hpp>
-
 #include <emilib/strprintf.cpp>
 
 #include <jo_gif.cpp>

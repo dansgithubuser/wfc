@@ -50,7 +50,6 @@
 #include <vector>
 
 #include <configuru.hpp>
-#include <emilib/irange.hpp>
 #include <emilib/strprintf.hpp>
 #include <loguru.hpp>
 #include <stb_image.h>
@@ -70,14 +69,16 @@
 
 #include "arrays.hpp"
 
+#define FORI(FORI_ITERATOR, FORI_MAX)\
+	auto FORI_MAX_VALUE_##FORI_ITERATOR=FORI_MAX;\
+	for(auto FORI_ITERATOR=decltype(FORI_MAX)(0); FORI_ITERATOR<FORI_MAX_VALUE_##FORI_ITERATOR; ++FORI_ITERATOR)
+
 const auto kUsage = R"(
 wfc.bin [-h/--help] [--gif] [job=samples.cfg, ...]
 	-h/--help   Print this help
 	--gif       Export GIF images of the process
 	file        Jobs to run
 )";
-
-using emilib::irange;
 
 struct RGBA
 {
@@ -156,8 +157,8 @@ using Image = Array2D<RGBA>;
 Image upsample(const Image& image)
 {
 	Image result(image.width() * kUpscale, image.height() * kUpscale, {});
-	for (const auto y : irange(result.height())) {
-		for (const auto x : irange(result.width())) {
+	FORI (y, result.height()) {
+		FORI (x, result.width()) {
 			result.set(x, y, image.get(x / kUpscale, y / kUpscale));
 		}
 	}
@@ -262,7 +263,7 @@ size_t spin_the_bottle(const std::vector<double>& a, double between_zero_and_one
 
 	double accumulated = 0;
 
-	for (auto i : irange(a.size())) {
+	FORI (i, a.size()) {
 		accumulated += a[i];
 		if (between_zero_and_sum <= accumulated) {
 			return i;
@@ -277,7 +278,7 @@ PatternHash hash_from_pattern(const Pattern& pattern, size_t palette_size)
 	CHECK(std::pow((double)palette_size, (double)pattern.size()) < std::pow(2.0, sizeof(PatternHash) * 8));
 	PatternHash result = 0;
 	size_t power = 1;
-	for (const auto i : irange(pattern.size()))
+	FORI (i, pattern.size())
 	{
 		result += pattern[pattern.size() - 1 - i] * power;
 		power *= palette_size;
@@ -312,8 +313,8 @@ template<typename Fun>
 Pattern make_pattern(int n, const Fun& fun)
 {
 	Pattern result(n * n);
-	for (auto dy : irange(n)) {
-		for (auto dx : irange(n)) {
+	FORI (dy, n) {
+		FORI (dx, n) {
 			result[dy * n + dx] = fun(dx, dy);
 		}
 	}
@@ -365,11 +366,11 @@ OverlappingModel::OverlappingModel(
 	size_t longest_propagator = 0;
 	size_t sum_propagator = 0;
 
-	for (auto t : irange(_num_patterns)) {
-		for (auto x : irange<int>(2 * n - 1)) {
-			for (auto y : irange<int>(2 * n - 1)) {
+	FORI (t, _num_patterns) {
+		FORI (x, 2 * n - 1) {
+			FORI (y, 2 * n - 1) {
 				auto& list = _propagator.mut_ref(t, x, y);
-				for (auto t2 : irange(_num_patterns)) {
+				FORI (t2, _num_patterns) {
 					if (agrees(_patterns[t], _patterns[t2], x - n + 1, y - n + 1)) {
 						list.push_back(t2);
 					}
@@ -438,8 +439,8 @@ bool OverlappingModel::propagate(Output* output) const
 Graphics OverlappingModel::graphics(const Output& output) const
 {
 	Graphics result(_width, _height, {});
-	for (const auto y : irange(_height)) {
-		for (const auto x : irange(_width)) {
+	FORI (y, _height) {
+		FORI (x, _width) {
 			auto& tile_constributors = result.mut_ref(x, y);
 
 			for (int dy = 0; dy < _n; ++dy) {
@@ -468,8 +469,8 @@ Image image_from_graphics(const Graphics& graphics, const Palette& palette)
 {
 	Image result(graphics.width(), graphics.height(), {0, 0, 0, 0});
 
-	for (const auto y : irange(graphics.height())) {
-		for (const auto x : irange(graphics.width())) {
+	FORI (y, graphics.height()) {
+		FORI (x, graphics.width()) {
 			const auto& tile_constributors = graphics.ref(x, y);
 			if (tile_constributors.empty()) {
 				result.set(x, y, {0, 0, 0, 255});
@@ -509,8 +510,8 @@ Tile rotate(const Tile& in_tile, const size_t tile_size)
 {
 	CHECK(in_tile.size() == tile_size * tile_size);
 	Tile out_tile;
-	for (size_t y : irange(tile_size)) {
-		for (size_t x : irange(tile_size)) {
+	FORI (y, tile_size) {
+		FORI (x, tile_size) {
 			out_tile.push_back(in_tile[tile_size - 1 - y + x * tile_size]);
 		}
 	}
@@ -718,7 +719,7 @@ Image TileModel::image(const Output& output) const
 	for (int x = 0; x < _width; ++x) {
 		for (int y = 0; y < _height; ++y) {
 			double sum = 0;
-			for (const auto t : irange(_num_patterns)) {
+			FORI (t, _num_patterns) {
 				if (output._wave.get(x, y, t)) {
 					sum += _pattern_weight[t];
 				}
@@ -763,18 +764,18 @@ PalettedImage load_paletted_image(const std::string& path)
 	// Fix issues with stbi_load:
 	if (comp == 1) {
 		// input was greyscale - set alpha:
-		for (auto& pixel : emilib::it_range(rgba, rgba + num_pixels)) {
-			pixel.a = pixel.r;
+		for (auto pixel = rgba; pixel < rgba + num_pixels; ++pixel) {
+			pixel->a = pixel->r;
 		}
 	} else {
 		if (comp == 3) {
-			for (auto& pixel : emilib::it_range(rgba, rgba + num_pixels)) {
-				pixel.a = 255;
+			for (auto pixel = rgba; pixel < rgba + num_pixels; ++pixel) {
+				pixel->a = 255;
 			}
 		}
-		for (auto& pixel : emilib::it_range(rgba, rgba + num_pixels)) {
-			if (pixel.a == 0) {
-				pixel = RGBA{0,0,0,0};
+		for (auto pixel = rgba; pixel< rgba + num_pixels; ++pixel) {
+			if (pixel->a == 0) {
+				*pixel = RGBA{0,0,0,0};
 			}
 		}
 	}
@@ -782,7 +783,7 @@ PalettedImage load_paletted_image(const std::string& path)
 	std::vector<RGBA> palette;
 	std::vector<ColorIndex> data;
 
-	for (const auto pixel_idx : irange(num_pixels)) {
+	FORI (pixel_idx, num_pixels) {
 		const RGBA color = rgba[pixel_idx];
 		const auto color_idx = std::find(palette.begin(), palette.end(), color) - palette.begin();
 		if (color_idx == palette.size()) {
@@ -817,8 +818,8 @@ PatternPrevalence extract_patterns(
 
 	PatternPrevalence patterns;
 
-	for (size_t y : irange(periodic_in ? sample.height : sample.height - n + 1)) {
-		for (size_t x : irange(periodic_in ? sample.width : sample.width - n + 1)) {
+	FORI (y, periodic_in ? sample.height : sample.height - n + 1) {
+		FORI (x, periodic_in ? sample.width : sample.width - n + 1) {
 			std::array<Pattern, 8> ps;
 			ps[0] = pattern_from_sample(x, y);
 			ps[1] = reflect(ps[0]);
@@ -916,15 +917,15 @@ Output create_output(const Model& model)
 	output._changes = Array2D<Bool>(model._width, model._height, false);
 
 	if (model._foundation != kInvalidIndex) {
-		for (const auto x : irange(model._width)) {
-			for (const auto t : irange(model._num_patterns)) {
+		FORI (x, model._width) {
+			FORI (t, model._num_patterns) {
 				if (t != model._foundation) {
 					output._wave.set(x, model._height - 1, t, false);
 				}
 			}
 			output._changes.set(x, model._height - 1, true);
 
-			for (const auto y : irange(model._height - 1)) {
+			FORI (y, model._height - 1) {
 				output._wave.set(x, y, model._foundation, false);
 				output._changes.set(x, y, true);
 			}
@@ -941,8 +942,8 @@ Image scroll_diagonally(const Image& image)
 	const auto width = image.width();
 	const auto height = image.height();
 	Image result(width, height);
-	for (const auto y : irange(height)) {
-		for (const auto x : irange(width)) {
+	FORI (y, height) {
+		FORI (x, width) {
 			result.set(x, y, image.get((x + 1) % width, (y + 1) % height));
 		}
 	}
@@ -989,8 +990,8 @@ void run_and_write(const Options& options, const std::string& name, const config
 	const size_t limit       = config.get_or("limit",       0);
 	const size_t screenshots = config.get_or("screenshots", 2);
 
-	for (const auto i : irange(screenshots)) {
-		for (const auto attempt : irange(10)) {
+	FORI (i, screenshots) {
+		FORI (attempt, 10) {
 			(void)attempt;
 			int seed = rand();
 

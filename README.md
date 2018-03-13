@@ -1,3 +1,9 @@
+undergoing metamorphosis
+
+I'm taking code out of this until it does only what I need, which is:
+- read from grid of "colors" as opposed to read neighboring rules list (overlapping model, not tiled model)
+- no command line interface, just a library, probably with a test
+
 # Wave Function Collapse in C++
 This is a C++ port of https://github.com/mxgmn/WaveFunctionCollapse.
 

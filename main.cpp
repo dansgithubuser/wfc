@@ -1101,28 +1101,6 @@ void run_config_file(const Options& options, const std::string& path)
 int main(int argc, char* argv[])
 {
 	loguru::init(argc, argv);
-
 	Options options;
-
-	std::vector<std::string> files;
-
-	for (int i = 1; i < argc; ++i) {
-		if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
-			printf(kUsage);
-			exit(0);
-		} else if (strcmp(argv[i], "--gif") == 0) {
-			options.export_gif = true;
-			LOG_F(INFO, "Enabled GIF exporting");
-		} else {
-			files.push_back(argv[i]);
-		}
-	}
-
-	if (files.empty()) {
-		files.push_back("samples.cfg");
-	}
-
-	for (const auto& file : files) {
-		run_config_file(options, file);
-	}
+	run_config_file(options, "samples.cfg");
 }

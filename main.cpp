@@ -44,6 +44,7 @@
 #include <memory>
 #include <numeric>
 #include <random>
+#include <stdexcept>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -57,6 +58,15 @@
 
 #define JO_GIF_HEADER_FILE_ONLY
 #include <jo_gif.cpp>
+
+#define CHECK(CHECK_EXPRESSION)\
+	do\
+	{\
+		if(!(CHECK_EXPRESSION))\
+		{\
+			throw std::logic_error("CHECK FAILED: " #CHECK_EXPRESSION);\
+		}\
+	} while (false)
 
 #include "arrays.hpp"
 
@@ -264,10 +274,7 @@ size_t spin_the_bottle(const std::vector<double>& a, double between_zero_and_one
 
 PatternHash hash_from_pattern(const Pattern& pattern, size_t palette_size)
 {
-	CHECK_LT_F(std::pow((double)palette_size, (double)pattern.size()),
-	           std::pow(2.0, sizeof(PatternHash) * 8),
-	           "Too large palette (it is %lu) or too large pattern size (it's %.0f)",
-	           palette_size, std::sqrt(pattern.size()));
+	CHECK(std::pow((double)palette_size, (double)pattern.size()) < std::pow(2.0, sizeof(PatternHash) * 8));
 	PatternHash result = 0;
 	size_t power = 1;
 	for (const auto i : irange(pattern.size()))
@@ -373,9 +380,6 @@ OverlappingModel::OverlappingModel(
 			}
 		}
 	}
-
-	LOG_F(INFO, "propagator length: mean/max/sum: %.1f, %lu, %lu",
-	    (double)sum_propagator / _propagator.size(), longest_propagator, sum_propagator);
 }
 
 bool OverlappingModel::propagate(Output* output) const
@@ -503,7 +507,7 @@ Image OverlappingModel::image(const Output& output) const
 
 Tile rotate(const Tile& in_tile, const size_t tile_size)
 {
-	CHECK_EQ_F(in_tile.size(), tile_size * tile_size);
+	CHECK(in_tile.size() == tile_size * tile_size);
 	Tile out_tile;
 	for (size_t y : irange(tile_size)) {
 		for (size_t x : irange(tile_size)) {
@@ -561,7 +565,7 @@ TileModel::TileModel(const configuru::Config& config, std::string subset_name, i
 			a = [](int i){ return i; };
 			b = [](int i){ return i; };
 		} else {
-			ABORT_F("Unknown symmetry '%s'", sym.c_str());
+			throw std::logic_error("Unknown symmetry " + sym);
 		}
 
 		const size_t num_patterns_so_far = action.size();
@@ -589,12 +593,12 @@ TileModel::TileModel(const configuru::Config& config, std::string subset_name, i
 		if (unique) {
 			for (int t = 0; t < cardinality; ++t) {
 				const Tile bitmap = tile_loader(emilib::strprintf("%s %d", tile_name.c_str(), t));
-				CHECK_EQ_F(bitmap.size(), _tile_size * _tile_size);
+				CHECK(bitmap.size() == _tile_size * _tile_size);
 				_tiles.push_back(bitmap);
 			}
 		} else {
 			const Tile bitmap = tile_loader(emilib::strprintf("%s", tile_name.c_str()));
-			CHECK_EQ_F(bitmap.size(), _tile_size * _tile_size);
+			CHECK(bitmap.size() == _tile_size * _tile_size);
 			_tiles.push_back(bitmap);
 			for (int t = 1; t < cardinality; ++t) {
 				_tiles.push_back(rotate(_tiles[num_patterns_so_far + t - 1], _tile_size));
@@ -613,8 +617,8 @@ TileModel::TileModel(const configuru::Config& config, std::string subset_name, i
 	for (const auto& neighbor : config["neighbors"].as_array()) {
 		const auto left  = neighbor["left"];
 		const auto right = neighbor["right"];
-		CHECK_EQ_F(left.array_size(),  2u);
-		CHECK_EQ_F(right.array_size(), 2u);
+		CHECK(left.array_size() == 2u);
+		CHECK(right.array_size() == 2u);
 
 		const auto left_tile_name = left[0].as_string();
 		const auto right_tile_name = right[0].as_string();
@@ -751,10 +755,9 @@ Image TileModel::image(const Output& output) const
 
 PalettedImage load_paletted_image(const std::string& path)
 {
-	ERROR_CONTEXT("loading sample image", path.c_str());
 	int width, height, comp;
 	RGBA* rgba = reinterpret_cast<RGBA*>(stbi_load(path.c_str(), &width, &height, &comp, 4));
-	CHECK_NOTNULL_F(rgba);
+	CHECK(rgba);
 	const auto num_pixels = width * height;
 
 	// Fix issues with stbi_load:
@@ -783,7 +786,7 @@ PalettedImage load_paletted_image(const std::string& path)
 		const RGBA color = rgba[pixel_idx];
 		const auto color_idx = std::find(palette.begin(), palette.end(), color) - palette.begin();
 		if (color_idx == palette.size()) {
-			CHECK_LT_F(palette.size(), MAX_COLORS, "Too many colors in image");
+			CHECK(palette.size() < MAX_COLORS);
 			palette.push_back(color);
 		}
 		data.push_back(color_idx);
@@ -803,8 +806,8 @@ PatternPrevalence extract_patterns(
 	const PalettedImage& sample, int n, bool periodic_in, size_t symmetry,
 	PatternHash* out_lowest_pattern)
 {
-	CHECK_LE_F(n, sample.width);
-	CHECK_LE_F(n, sample.height);
+	CHECK(n < sample.width);
+	CHECK(n < sample.height);
 
 	const auto pattern_from_sample = [&](size_t x, size_t y) {
 		return make_pattern(n, [&](size_t dx, size_t dy){ return sample.at_wrapped(x + dx, y + dy); });
@@ -974,14 +977,10 @@ Result run(Output* output, const Model& model, size_t seed, size_t limit, jo_gif
 					}
 				}
 			}
-
-			LOG_F(INFO, "%s after %lu iterations", result2str(result), l);
 			return result;
 		}
 		while (model.propagate(output));
 	}
-
-	LOG_F(INFO, "Unfinished after %lu iterations", limit);
 	return Result::kUnfinished;
 }
 
@@ -1015,8 +1014,7 @@ void run_and_write(const Options& options, const std::string& name, const config
 			if (result == Result::kSuccess) {
 				const auto image = model.image(output);
 				const auto out_path = emilib::strprintf("output/%s_%lu.png", name.c_str(), i);
-				CHECK_F(stbi_write_png(out_path.c_str(), image.width(), image.height(), 4, image.data(), 0) != 0,
-				        "Failed to write image to %s", out_path.c_str());
+				CHECK(stbi_write_png(out_path.c_str(), image.width(), image.height(), 4, image.data(), 0));
 				break;
 			}
 		}
@@ -1037,10 +1035,8 @@ std::unique_ptr<Model> make_overlapping(const std::string& image_dir, const conf
 	const auto   has_foundation = config.get_or("foundation",   false);
 
 	const auto sample_image = load_paletted_image(in_path.c_str());
-	LOG_F(INFO, "palette size: %lu", sample_image.palette.size());
 	PatternHash foundation = kInvalidHash;
 	const auto hashed_patterns = extract_patterns(sample_image, n, periodic_in, symmetry, has_foundation ? &foundation : nullptr);
-	LOG_F(INFO, "Found %lu unique patterns in sample image", hashed_patterns.size());
 
 	return std::unique_ptr<Model>{
 		new OverlappingModel{hashed_patterns, sample_image.palette, n, periodic_out, out_width, out_height, foundation}
@@ -1060,7 +1056,7 @@ std::unique_ptr<Model> make_tiled(const std::string& image_dir, const configuru:
 		const std::string path = emilib::strprintf("%s%s/%s.bmp", image_dir.c_str(), subdir.c_str(), tile_name.c_str());
 		int width, height, comp;
 		RGBA* rgba = reinterpret_cast<RGBA*>(stbi_load(path.c_str(), &width, &height, &comp, 4));
-		CHECK_NOTNULL_F(rgba);
+		CHECK(rgba);
 		const auto num_pixels = width * height;
 		Tile tile(rgba, rgba + num_pixels);
 		stbi_image_free(rgba);
@@ -1076,13 +1072,11 @@ std::unique_ptr<Model> make_tiled(const std::string& image_dir, const configuru:
 
 void run_config_file(const Options& options, const std::string& path)
 {
-	LOG_F(INFO, "Running all samples in %s", path.c_str());
 	const auto samples = configuru::parse_file(path, configuru::CFG);
 	const auto image_dir = samples["image_dir"].as_string();
 
 	if (samples.count("overlapping")) {
 		for (const auto& p : samples["overlapping"].as_object()) {
-			LOG_SCOPE_F(INFO, "%s", p.key().c_str());
 			const auto model = make_overlapping(image_dir, p.value());
 			run_and_write(options, p.key(), p.value(), *model);
 			p.value().check_dangling();
@@ -1091,7 +1085,6 @@ void run_config_file(const Options& options, const std::string& path)
 
 	if (samples.count("tiled")) {
 		for (const auto& p : samples["tiled"].as_object()) {
-			LOG_SCOPE_F(INFO, "Tiled %s", p.key().c_str());
 			const auto model = make_tiled(image_dir, p.value());
 			run_and_write(options, p.key(), p.value(), *model);
 		}

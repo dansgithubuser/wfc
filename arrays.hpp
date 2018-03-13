@@ -12,8 +12,8 @@ public:
 
 	const size_t index(size_t x, size_t y) const
 	{
-		DCHECK_LT_F(x, _width);
-		DCHECK_LT_F(y, _height);
+		CHECK(x < _width);
+		CHECK(y < _height);
 		return y * _width + x;
 	}
 
@@ -41,9 +41,9 @@ public:
 
 	const size_t index(size_t x, size_t y, size_t z) const
 	{
-		DCHECK_LT_F(x, _width);
-		DCHECK_LT_F(y, _height);
-		DCHECK_LT_F(z, _depth);
+		CHECK(x < _width);
+		CHECK(y < _height);
+		CHECK(z < _depth);
 		// return z * _width * _height + y * _width + x;
 		return x * _height * _depth + y * _depth + z; // better cache hit ratio in our use case
 	}

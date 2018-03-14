@@ -53,9 +53,6 @@
 #include <stb_image.h>
 #include <stb_image_write.h>
 
-#define JO_GIF_HEADER_FILE_ONLY
-#include <jo_gif.cpp>
-
 #define CHECK(CHECK_EXPRESSION)\
 	do\
 	{\
@@ -70,13 +67,6 @@
 #define FORI(FORI_ITERATOR, FORI_MAX)\
 	auto FORI_MAX_VALUE_##FORI_ITERATOR=FORI_MAX;\
 	for(auto FORI_ITERATOR=decltype(FORI_MAX)(0); FORI_ITERATOR<FORI_MAX_VALUE_##FORI_ITERATOR; ++FORI_ITERATOR)
-
-const auto kUsage = R"(
-wfc.bin [-h/--help] [--gif] [job=samples.cfg, ...]
-	-h/--help   Print this help
-	--gif       Export GIF images of the process
-	file        Jobs to run
-)";
 
 struct RGBA
 {
@@ -97,16 +87,7 @@ using PatternIndex      = uint16_t;
 const auto kInvalidIndex = static_cast<size_t>(-1);
 const auto kInvalidHash = static_cast<PatternHash>(-1);
 
-const bool   kGifSeparatePalette  = true;
-const size_t kGifInterval         =  16; // Save an image every X iterations
-const int    kGifDelayCentiSec    =   1;
-const int    kGifEndPauseCentiSec = 200;
 const size_t kUpscale             =   4; // Upscale images before saving
-
-struct Options
-{
-	bool export_gif = false;
-};
 
 enum class Result
 {
@@ -675,7 +656,7 @@ Image scroll_diagonally(const Image& image)
 	return result;
 }
 
-Result run(Output* output, const Model& model, size_t seed, size_t limit, jo_gif_t* gif_out)
+Result run(Output* output, const Model& model, size_t seed, size_t limit)
 {
 	std::mt19937 gen(seed);
 	std::uniform_real_distribution<double> dis(0.0, 1.0);
@@ -684,25 +665,7 @@ Result run(Output* output, const Model& model, size_t seed, size_t limit, jo_gif
 	for (size_t l = 0; l < limit || limit == 0; ++l) {
 		Result result = observe(model, output, random_double);
 
-		if (gif_out && l % kGifInterval == 0) {
-			const auto image = model.image(*output);
-			jo_gif_frame(gif_out, (uint8_t*)image.data(), kGifDelayCentiSec, kGifSeparatePalette);
-		}
-
 		if (result != Result::kUnfinished) {
-			if (gif_out) {
-				// Pause on the last image:
-				auto image = model.image(*output);
-				jo_gif_frame(gif_out, (uint8_t*)image.data(), kGifEndPauseCentiSec, kGifSeparatePalette);
-
-				if (model._periodic_out) {
-					// Scroll the image diagonally:
-					for (size_t i = 0; i < model._width; ++i) {
-						image = scroll_diagonally(image);
-						jo_gif_frame(gif_out, (uint8_t*)image.data(), kGifDelayCentiSec, kGifSeparatePalette);
-					}
-				}
-			}
 			return result;
 		}
 		while (model.propagate(output));
@@ -722,7 +685,7 @@ void run_and_write(const std::string& name, const Model& model)
 
 			Output output = create_output(model);
 
-			const auto result = run(&output, model, seed, limit, nullptr);
+			const auto result = run(&output, model, seed, limit);
 
 			if (result == Result::kSuccess) {
 				const auto image = model.image(output);

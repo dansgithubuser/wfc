@@ -5,5 +5,3 @@
 #include <stb_image_write.h>
 
 #include <emilib/strprintf.cpp>
-
-#include <jo_gif.cpp>

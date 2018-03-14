@@ -8,8 +8,6 @@
 		exit 0
 	fi
 
-	git submodule update --init --recursive
-
 	mkdir -p build
 
 	CXX=g++
@@ -23,7 +21,6 @@
 		if [ ! -f $obj_path ] || [ $obj_path -ot $source_path ]; then
 			echo "Compiling $source_path to $obj_path..."
 			$CXX $CPPFLAGS                      \
-			    -I libs -I libs/emilib          \
 			    -c $source_path -o $obj_path
 		fi
 	done

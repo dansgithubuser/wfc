@@ -49,7 +49,6 @@
 #include <unordered_set>
 #include <vector>
 
-#include <configuru.hpp>
 #include <emilib/strprintf.hpp>
 #include <stb_image.h>
 #include <stb_image_write.h>
@@ -711,10 +710,10 @@ Result run(Output* output, const Model& model, size_t seed, size_t limit, jo_gif
 	return Result::kUnfinished;
 }
 
-void run_and_write(const Options& options, const std::string& name, const configuru::Config& config, const Model& model)
+void run_and_write(const std::string& name, const Model& model)
 {
-	const size_t limit       = config.get_or("limit",       0);
-	const size_t screenshots = config.get_or("screenshots", 2);
+	const size_t limit       = 0;
+	const size_t screenshots = 2;
 
 	FORI (i, screenshots) {
 		FORI (attempt, 10) {
@@ -723,20 +722,7 @@ void run_and_write(const Options& options, const std::string& name, const config
 
 			Output output = create_output(model);
 
-			jo_gif_t gif;
-
-			if (options.export_gif) {
-				const auto initial_image = model.image(output);
-				const auto gif_path = emilib::strprintf("output/%s_%lu.gif", name.c_str(), i);
-				const int gif_palette_size = 255; // TODO
-				gif = jo_gif_start(gif_path.c_str(), initial_image.width(), initial_image.height(), 0, gif_palette_size);
-			}
-
-			const auto result = run(&output, model, seed, limit, options.export_gif ? &gif : nullptr);
-
-			if (options.export_gif) {
-				jo_gif_end(&gif);
-			}
+			const auto result = run(&output, model, seed, limit, nullptr);
 
 			if (result == Result::kSuccess) {
 				const auto image = model.image(output);
@@ -748,20 +734,17 @@ void run_and_write(const Options& options, const std::string& name, const config
 	}
 }
 
-std::unique_ptr<Model> make_overlapping(const std::string& image_dir, const configuru::Config& config)
+std::unique_ptr<Model> make_overlapping()
 {
-	const auto image_filename = config["image"].as_string();
-	const auto in_path = image_dir + image_filename;
+	const int    n              = 3;
+	const size_t out_width      = 48;
+	const size_t out_height     = 48;
+	const size_t symmetry       = 8;
+	const bool   periodic_out   = true;
+	const bool   periodic_in    = true;
+	const auto   has_foundation = false;
 
-	const int    n              = config.get_or("n",             3);
-	const size_t out_width      = config.get_or("width",        48);
-	const size_t out_height     = config.get_or("height",       48);
-	const size_t symmetry       = config.get_or("symmetry",      8);
-	const bool   periodic_out   = config.get_or("periodic_out", true);
-	const bool   periodic_in    = config.get_or("periodic_in",  true);
-	const auto   has_foundation = config.get_or("foundation",   false);
-
-	const auto sample_image = load_paletted_image(in_path.c_str());
+	const auto sample_image = load_paletted_image("samples/simple_knot.bmp");
 	PatternHash foundation = kInvalidHash;
 	const auto hashed_patterns = extract_patterns(sample_image, n, periodic_in, symmetry, has_foundation ? &foundation : nullptr);
 
@@ -770,22 +753,8 @@ std::unique_ptr<Model> make_overlapping(const std::string& image_dir, const conf
 	};
 }
 
-void run_config_file(const Options& options, const std::string& path)
-{
-	const auto samples = configuru::parse_file(path, configuru::CFG);
-	const auto image_dir = samples["image_dir"].as_string();
-
-	if (samples.count("overlapping")) {
-		for (const auto& p : samples["overlapping"].as_object()) {
-			const auto model = make_overlapping(image_dir, p.value());
-			run_and_write(options, p.key(), p.value(), *model);
-			p.value().check_dangling();
-		}
-	}
-}
-
 int main(int argc, char* argv[])
 {
-	Options options;
-	run_config_file(options, "samples.cfg");
+	const auto model = make_overlapping();
+	run_and_write("simple_knot.bmp", *model);
 }

@@ -49,7 +49,6 @@
 #include <unordered_set>
 #include <vector>
 
-#include <emilib/strprintf.hpp>
 #include <stb_image.h>
 #include <stb_image_write.h>
 
@@ -689,7 +688,7 @@ void run_and_write(const std::string& name, const Model& model)
 
 			if (result == Result::kSuccess) {
 				const auto image = model.image(output);
-				const auto out_path = emilib::strprintf("output/%s_%lu.png", name.c_str(), i);
+				const auto out_path = "output/"+name+"_"+std::to_string(i)+".png";
 				CHECK(stbi_write_png(out_path.c_str(), image.width(), image.height(), 4, image.data(), 0));
 				break;
 			}

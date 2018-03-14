@@ -40,6 +40,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <fstream>
 #include <limits>
 #include <memory>
 #include <numeric>
@@ -483,19 +484,28 @@ Image image_from_graphics(const Graphics& graphics, const Palette& palette)
 			const auto& tile_constributors = graphics.ref(x, y);
 			if (tile_constributors.empty()) {
 				result.set(x, y, {0, 0, 0, 255});
+				printf("x ");
 			} else if (tile_constributors.size() == 1) {
 				result.set(x, y, palette[tile_constributors[0]]);
+				printf("%d ", tile_constributors[0]);
 			} else {
 				size_t r = 0;
 				size_t g = 0;
 				size_t b = 0;
 				size_t a = 0;
+				const auto first = *tile_constributors.begin();
+				bool equal=true;
 				for (const auto tile : tile_constributors) {
+					if(equal&&tile!=first){
+						printf("d ");
+						equal=false;
+					}
 					r += palette[tile].r;
 					g += palette[tile].g;
 					b += palette[tile].b;
 					a += palette[tile].a;
 				}
+				if(equal) printf("%d ", first);
 				r /= tile_constributors.size();
 				g /= tile_constributors.size();
 				b /= tile_constributors.size();
@@ -503,6 +513,7 @@ Image image_from_graphics(const Graphics& graphics, const Palette& palette)
 				result.set(x, y, {(uint8_t)r, (uint8_t)g, (uint8_t)b, (uint8_t)a});
 			}
 		}
+		printf("\n");
 	}
 
 	return result;
@@ -517,44 +528,14 @@ Image OverlappingModel::image(const Output& output) const
 
 PalettedImage load_paletted_image(const std::string& path)
 {
-	int width, height, comp;
-	RGBA* rgba = reinterpret_cast<RGBA*>(stbi_load(path.c_str(), &width, &height, &comp, 4));
-	CHECK(rgba);
-	const auto num_pixels = width * height;
+	std::ifstream file(path);
+	int width, height;
+	file>>width>>height;
+	unsigned input;
+	std::vector<uint8_t> data;
+	while(file>>input) data.push_back((uint8_t)input);
 
-	// Fix issues with stbi_load:
-	if (comp == 1) {
-		// input was greyscale - set alpha:
-		for (auto pixel = rgba; pixel < rgba + num_pixels; ++pixel) {
-			pixel->a = pixel->r;
-		}
-	} else {
-		if (comp == 3) {
-			for (auto pixel = rgba; pixel < rgba + num_pixels; ++pixel) {
-				pixel->a = 255;
-			}
-		}
-		for (auto pixel = rgba; pixel< rgba + num_pixels; ++pixel) {
-			if (pixel->a == 0) {
-				*pixel = RGBA{0,0,0,0};
-			}
-		}
-	}
-
-	std::vector<RGBA> palette;
-	std::vector<ColorIndex> data;
-
-	FORI (pixel_idx, num_pixels) {
-		const RGBA color = rgba[pixel_idx];
-		const auto color_idx = std::find(palette.begin(), palette.end(), color) - palette.begin();
-		if (color_idx == palette.size()) {
-			CHECK(palette.size() < MAX_COLORS);
-			palette.push_back(color);
-		}
-		data.push_back(color_idx);
-	}
-
-	stbi_image_free(rgba);
+	Palette palette(*std::max_element(data.begin(), data.end())+1);
 
 	return PalettedImage{
 		static_cast<size_t>(width),
@@ -762,7 +743,7 @@ std::unique_ptr<Model> make_overlapping()
 	const bool   periodic_in    = true;
 	const auto   has_foundation = false;
 
-	const auto sample_image = load_paletted_image("samples/simple_knot.bmp");
+	const auto sample_image = load_paletted_image("samples/simple_knot.txt");
 	PatternHash foundation = kInvalidHash;
 	const auto hashed_patterns = extract_patterns(sample_image, n, periodic_in, symmetry, has_foundation ? &foundation : nullptr);
 
@@ -774,5 +755,5 @@ std::unique_ptr<Model> make_overlapping()
 int main(int argc, char* argv[])
 {
 	const auto model = make_overlapping();
-	run_and_write("simple_knot.bmp", *model);
+	run_and_write("simple_knot", *model);
 }

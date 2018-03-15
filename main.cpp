@@ -129,23 +129,12 @@ using PatternIndex      = uint16_t;
 const auto kInvalidIndex = static_cast<size_t>(-1);
 const auto kInvalidHash = static_cast<PatternHash>(-1);
 
-const size_t kUpscale             =   4; // Upscale images before saving
-
 enum class Result
 {
 	kSuccess,
 	kFail,
 	kUnfinished,
 };
-
-const char* result2str(const Result result)
-{
-	return result == Result::kSuccess ? "success"
-	     : result == Result::kFail    ? "fail"
-	     : "unfinished";
-}
-
-const size_t MAX_COLORS = 1 << (sizeof(ColorIndex) * 8);
 
 using Graphics = Array2D<std::vector<ColorIndex>>;
 

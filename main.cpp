@@ -183,19 +183,6 @@ using Image = Array2D<RGBA>;
 
 // ----------------------------------------------------------------------------
 
-Image upsample(const Image& image)
-{
-	Image result(image.width() * kUpscale, image.height() * kUpscale, {});
-	FORI (y, result.height()) {
-		FORI (x, result.width()) {
-			result.set(x, y, image.get(x / kUpscale, y / kUpscale));
-		}
-	}
-	return result;
-}
-
-// ----------------------------------------------------------------------------
-
 class Model
 {
 public:
@@ -515,7 +502,7 @@ Image image_from_graphics(const Graphics& graphics, const Palette& palette)
 
 Image OverlappingModel::image(const Output& output) const
 {
-	return upsample(image_from_graphics(graphics(output), _palette));
+	return image_from_graphics(graphics(output), _palette);
 }
 
 // ----------------------------------------------------------------------------

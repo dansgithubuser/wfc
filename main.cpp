@@ -118,16 +118,8 @@ private:
 	auto FORI_MAX_VALUE_##FORI_ITERATOR=FORI_MAX;\
 	for(auto FORI_ITERATOR=decltype(FORI_MAX)(0); FORI_ITERATOR<FORI_MAX_VALUE_##FORI_ITERATOR; ++FORI_ITERATOR)
 
-struct RGBA
-{
-	uint8_t r, g, b, a;
-};
-static_assert(sizeof(RGBA) == 4, "");
-bool operator==(RGBA x, RGBA y) { return x.r == y.r && x.g == y.g && x.b == y.b && x.a == y.a; }
-
 using Bool              = uint8_t; // To avoid problems with vector<bool>
 using ColorIndex        = uint8_t; // tile index or color index. If you have more than 255, don't.
-using Palette           = std::vector<RGBA>;
 using Pattern           = std::vector<ColorIndex>;
 using PatternHash       = uint64_t; // Another representation of a Pattern.
 using PatternPrevalence = std::unordered_map<PatternHash, size_t>;
@@ -161,7 +153,7 @@ struct PalettedImage
 {
 	size_t                  width, height;
 	std::vector<ColorIndex> data; // width * height
-	Palette                 palette;
+	uint8_t                 palette_size;
 
 	ColorIndex at_wrapped(size_t x, size_t y) const
 	{
@@ -179,8 +171,6 @@ struct Output
 	Array2D<Bool> _changes; // _width X _height. Starts off false everywhere.
 };
 
-using Image = Array2D<RGBA>;
-
 // ----------------------------------------------------------------------------
 
 class Model
@@ -197,7 +187,7 @@ public:
 
 	virtual bool propagate(Output* output) const = 0;
 	virtual bool on_boundary(int x, int y) const = 0;
-	virtual Image image(const Output& output) const = 0;
+	virtual void image(const Output& output) const = 0;
 };
 
 // ----------------------------------------------------------------------------
@@ -207,7 +197,7 @@ class OverlappingModel : public Model
 public:
 	OverlappingModel(
 		const PatternPrevalence& hashed_patterns,
-		const Palette&           palette,
+		const uint8_t            palette_size,
 		int                      n,
 		bool                     periodic_out,
 		size_t                   width,
@@ -221,7 +211,7 @@ public:
 		return !_periodic_out && (x + _n > _width || y + _n > _height);
 	}
 
-	Image image(const Output& output) const override;
+	void image(const Output& output) const override;
 
 	Graphics graphics(const Output& output) const;
 
@@ -231,7 +221,6 @@ private:
 	// list of other pattern indices that agree on this x/y offset (?)
 	Array3D<std::vector<PatternIndex>> _propagator;
 	std::vector<Pattern>               _patterns;
-	Palette                            _palette;
 };
 
 // ----------------------------------------------------------------------------
@@ -316,7 +305,7 @@ Pattern make_pattern(int n, const Fun& fun)
 
 OverlappingModel::OverlappingModel(
 	const PatternPrevalence& hashed_patterns,
-	const Palette&           palette,
+	const uint8_t            palette_size,
 	int                      n,
 	bool                     periodic_out,
 	size_t                   width,
@@ -328,14 +317,13 @@ OverlappingModel::OverlappingModel(
 	_num_patterns = hashed_patterns.size();
 	_periodic_out = periodic_out;
 	_n            = n;
-	_palette      = palette;
 
 	for (const auto& it : hashed_patterns) {
 		if (it.first == foundation_pattern) {
 			_foundation = _patterns.size();
 		}
 
-		_patterns.push_back(pattern_from_hash(it.first, n, _palette.size()));
+		_patterns.push_back(pattern_from_hash(it.first, n, palette_size));
 		_pattern_weight.push_back(it.second);
 	}
 
@@ -456,24 +444,16 @@ Graphics OverlappingModel::graphics(const Output& output) const
 	return result;
 }
 
-Image image_from_graphics(const Graphics& graphics, const Palette& palette)
+void image_from_graphics(const Graphics& graphics)
 {
-	Image result(graphics.width(), graphics.height(), {0, 0, 0, 0});
-
 	FORI (y, graphics.height()) {
 		FORI (x, graphics.width()) {
 			const auto& tile_constributors = graphics.ref(x, y);
 			if (tile_constributors.empty()) {
-				result.set(x, y, {0, 0, 0, 255});
 				printf("x ");
 			} else if (tile_constributors.size() == 1) {
-				result.set(x, y, palette[tile_constributors[0]]);
 				printf("%d ", tile_constributors[0]);
 			} else {
-				size_t r = 0;
-				size_t g = 0;
-				size_t b = 0;
-				size_t a = 0;
 				const auto first = *tile_constributors.begin();
 				bool equal=true;
 				for (const auto tile : tile_constributors) {
@@ -481,28 +461,17 @@ Image image_from_graphics(const Graphics& graphics, const Palette& palette)
 						printf("d ");
 						equal=false;
 					}
-					r += palette[tile].r;
-					g += palette[tile].g;
-					b += palette[tile].b;
-					a += palette[tile].a;
 				}
 				if(equal) printf("%d ", first);
-				r /= tile_constributors.size();
-				g /= tile_constributors.size();
-				b /= tile_constributors.size();
-				a /= tile_constributors.size();
-				result.set(x, y, {(uint8_t)r, (uint8_t)g, (uint8_t)b, (uint8_t)a});
 			}
 		}
 		printf("\n");
 	}
-
-	return result;
 }
 
-Image OverlappingModel::image(const Output& output) const
+void OverlappingModel::image(const Output& output) const
 {
-	return image_from_graphics(graphics(output), _palette);
+	image_from_graphics(graphics(output));
 }
 
 // ----------------------------------------------------------------------------
@@ -516,12 +485,13 @@ PalettedImage load_paletted_image(const std::string& path)
 	std::vector<uint8_t> data;
 	while(file>>input) data.push_back((uint8_t)input);
 
-	Palette palette(*std::max_element(data.begin(), data.end())+1);
+	auto palette_size=*std::max_element(data.begin(), data.end())+1;
+	CHECK(palette_size<256);
 
 	return PalettedImage{
 		static_cast<size_t>(width),
 		static_cast<size_t>(height),
-		data, palette
+		data, (uint8_t)palette_size
 	};
 }
 
@@ -554,7 +524,7 @@ PatternPrevalence extract_patterns(
 			ps[7] = reflect(ps[6]);
 
 			for (int k = 0; k < symmetry; ++k) {
-				auto hash = hash_from_pattern(ps[k], sample.palette.size());
+				auto hash = hash_from_pattern(ps[k], sample.palette_size);
 				patterns[hash] += 1;
 				if (out_lowest_pattern && y == sample.height - 1) {
 					*out_lowest_pattern = hash;
@@ -660,19 +630,6 @@ Output create_output(const Model& model)
 	return output;
 }
 
-Image scroll_diagonally(const Image& image)
-{
-	const auto width = image.width();
-	const auto height = image.height();
-	Image result(width, height);
-	FORI (y, height) {
-		FORI (x, width) {
-			result.set(x, y, image.get((x + 1) % width, (y + 1) % height));
-		}
-	}
-	return result;
-}
-
 Result run(Output* output, const Model& model, size_t seed, size_t limit)
 {
 	std::mt19937 gen(seed);
@@ -705,7 +662,7 @@ void run_and_write(const std::string& name, const Model& model)
 			const auto result = run(&output, model, seed, limit);
 
 			if (result == Result::kSuccess) {
-				const auto image = model.image(output);
+				model.image(output);
 				break;
 			}
 		}
@@ -727,7 +684,7 @@ std::unique_ptr<Model> make_overlapping()
 	const auto hashed_patterns = extract_patterns(sample_image, n, periodic_in, symmetry, has_foundation ? &foundation : nullptr);
 
 	return std::unique_ptr<Model>{
-		new OverlappingModel{hashed_patterns, sample_image.palette, n, periodic_out, out_width, out_height, foundation}
+		new OverlappingModel{hashed_patterns, sample_image.palette_size, n, periodic_out, out_width, out_height, foundation}
 	};
 }
 
